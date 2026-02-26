@@ -21,8 +21,8 @@ import streamlit as st
 from rag_retriever import RAGRetriever
 
 # ─── Configuration ────────────────────────────────────────────────────────────
-LM_STUDIO_BASE_URL = "http://localhost:1234/v1"
-LM_STUDIO_MODEL = "gemma-3-12b-it"   # adjust to exact model name in LM Studio
+LM_STUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
+LM_STUDIO_MODEL = "google/gemma-3-12b"   # adjust to exact model name in LM Studio
 TOP_K = 5
 MAX_CONTEXT_CHARS = 2000  # truncate each retrieved transcript in the prompt
 
