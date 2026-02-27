@@ -56,7 +56,12 @@ def build_index() -> None:
 
     # Build metadata list (parallel to FAISS positions)
     metadata = []
-    for _, row in df.iterrows():
+    for i, (_, row) in enumerate(df.iterrows()):
+        # Parse turns for rich UI display; fall back to [] on bad JSON
+        try:
+            turns = json.loads(row.get("Transcript_JSON", "[]"))
+        except (json.JSONDecodeError, TypeError):
+            turns = []
         metadata.append({
             "call_id": str(row.get("Call_ID", "")),
             "category": str(row.get("Category", "")),
@@ -64,7 +69,8 @@ def build_index() -> None:
             "call_transfer": bool(row.get("Call_Transfer", False)),
             "callback_7day": int(row.get("Customer_Callback_7_Day", 0)),
             "agent_id": str(row.get("Agent_ID", "")),
-            "transcript_text": texts[_],   # store full text for retrieval
+            "transcript_text": texts[i],   # plain text used for embedding & prompt
+            "transcript_turns": turns,     # structured turns for human-readable UI
         })
 
     # Embed

@@ -11,7 +11,6 @@ Workflow:
        • The best agent script line to improve sentiment
 """
 
-import json
 import textwrap
 from typing import Any
 
@@ -123,6 +122,82 @@ def extract_next_action(analysis: str) -> str | None:
     return None
 
 
+# ─── Human-readable transcript renderer ──────────────────────────────────────
+_SPEAKER_STYLE = {
+    "agent": {
+        "label": "Agent",
+        "bg": "#1e3a5f",
+        "color": "#7ec8e3",
+        "align": "left",
+    },
+    "customer": {
+        "label": "Customer",
+        "bg": "#2d1f3d",
+        "color": "#c97bdb",
+        "align": "right",
+    },
+}
+_EVENT_LABELS = {
+    "verification": "🔐 Verification",
+    "hold_start": "⏸ Hold started",
+    "hold_end": "▶ Hold ended",
+    "transfer": "↗ Transfer",
+}
+
+
+def _render_transcript(retrieved_item: dict[str, Any]) -> None:
+    """Render a retrieved call's transcript_turns as a styled chat UI."""
+    turns = retrieved_item.get("transcript_turns", [])
+    if not turns:
+        st.text(retrieved_item.get("transcript_text", "No transcript available."))
+        return
+
+    html_parts = ['<div style="font-family: sans-serif; padding: 4px 0;">']
+
+    for turn in turns:
+        speaker = turn.get("speaker", "unknown").lower()
+        text = turn.get("text", "").strip()
+        event = turn.get("event", "null")
+
+        # Show event badges between turns
+        if event and event != "null":
+            label = _EVENT_LABELS.get(event, f"• {event}")
+            html_parts.append(
+                f'<div style="text-align:center; margin: 8px 0;">'
+                f'<span style="background:#333; color:#aaa; font-size:11px; '
+                f'padding:2px 10px; border-radius:20px;">{label}</span></div>'
+            )
+
+        if not text:
+            continue
+
+        style = _SPEAKER_STYLE.get(speaker, {"label": speaker.capitalize(),
+                                              "bg": "#2a2a2a", "color": "#ccc",
+                                              "align": "left"})
+        is_right = style["align"] == "right"
+        bubble_margin = "margin-left: auto; margin-right: 8px;" if is_right else "margin-left: 8px; margin-right: auto;"
+
+        html_parts.append(f"""
+            <div style="display:flex; flex-direction:column;
+                        align-items:{'flex-end' if is_right else 'flex-start'};
+                        margin: 6px 0;">
+                <div style="font-size:10px; color:#888; margin-bottom:3px;
+                            text-align:{'right' if is_right else 'left'};">
+                    {style['label']}
+                </div>
+                <div style="background:{style['bg']}; color:{style['color']};
+                            border-radius:12px; padding:10px 14px;
+                            max-width:80%; font-size:14px; line-height:1.5;
+                            {bubble_margin}">
+                    {text}
+                </div>
+            </div>
+        """)
+
+    html_parts.append("</div>")
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
+
+
 # ─── Streamlit UI ─────────────────────────────────────────────────────────────
 def main() -> None:
     st.set_page_config(
@@ -154,7 +229,7 @@ def main() -> None:
         st.header("Settings")
         top_k = st.slider("Similar calls to retrieve (top-k)", 1, 10, TOP_K)
         temperature = st.slider("LLM temperature", 0.0, 1.0, 0.3, step=0.05)
-        show_retrieved = st.checkbox("Show retrieved similar calls", value=False)
+        show_retrieved = st.checkbox("Show all retrieved similar calls", value=False)
         st.divider()
         st.caption(f"Model: {LM_STUDIO_MODEL}")
         st.caption(f"LM Studio: {LM_STUDIO_BASE_URL}")
@@ -253,15 +328,29 @@ def main() -> None:
                 st.markdown("**Full Analysis**")
                 st.markdown(entry["analysis"])
 
-            if show_retrieved:
+            # ── Most similar call — always shown, human-readable ───────────
+            if entry["retrieved"]:
                 st.divider()
-                st.markdown(f"**Top-{len(entry['retrieved'])} Similar Calls Retrieved**")
-                for j, r in enumerate(entry["retrieved"], 1):
+                top = entry["retrieved"][0]
+                st.markdown(
+                    f"**Most Similar Past Call** &nbsp;·&nbsp; "
+                    f"`{top['call_id']}` &nbsp;·&nbsp; "
+                    f"{top['category']} / {top['sub_category']} &nbsp;·&nbsp; "
+                    f"Similarity **{top['similarity']:.3f}** &nbsp;·&nbsp; "
+                    f"Transfer: {'Yes' if top['call_transfer'] else 'No'} &nbsp;·&nbsp; "
+                    f"Callback 7d: {'Yes' if top['callback_7day'] else 'No'}"
+                )
+                _render_transcript(top)
+
+            # ── Additional retrieved calls (collapsed) ─────────────────────
+            if show_retrieved and len(entry["retrieved"]) > 1:
+                st.markdown(f"**Other Similar Calls ({len(entry['retrieved']) - 1})**")
+                for j, r in enumerate(entry["retrieved"][1:], 2):
                     with st.expander(
                         f"Call {j}: {r['category']} / {r['sub_category']} "
                         f"(sim={r['similarity']:.3f})"
                     ):
-                        st.text(r["transcript_text"][:800] + " …")
+                        _render_transcript(r)
 
 
 if __name__ == "__main__":
