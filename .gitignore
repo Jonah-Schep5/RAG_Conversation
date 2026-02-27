@@ -1,0 +1,19 @@
+# Large data/model files — do not commit
+src/metadata.json
+src/metadata.json.gz
+src/faiss_index.bin
+src/train_data.csv
+src/test_data.csv
+src/telecom_synthetic_call_transcript_data.csv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Env
+.env
+venv/
+.venv/
