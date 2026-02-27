@@ -6,6 +6,7 @@ Provides a RAGRetriever class that:
   - Returns the top-k most similar past conversations with their metadata
 """
 
+import gzip
 import json
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,7 @@ from sentence_transformers import SentenceTransformer
 
 DATA_DIR = Path(__file__).parent
 INDEX_FILE = DATA_DIR / "faiss_index.bin"
-METADATA_FILE = DATA_DIR / "metadata.json"
+METADATA_FILE = DATA_DIR / "metadata.json.gz"
 
 EMBED_MODEL = "all-MiniLM-L6-v2"
 
@@ -29,8 +30,15 @@ class RAGRetriever:
                 "Run build_index.py first."
             )
         self.index = faiss.read_index(str(INDEX_FILE))
-        with open(METADATA_FILE) as f:
-            self.metadata: list[dict[str, Any]] = json.load(f)
+        with gzip.open(METADATA_FILE, "rt", encoding="utf-8") as f:
+            raw: list[dict[str, Any]] = json.load(f)
+        # Expand compact turns [[speaker, text, event], ...] back to dicts
+        for item in raw:
+            item["transcript_turns"] = [
+                {"speaker": t[0], "text": t[1], "event": t[2]}
+                for t in item.get("transcript_turns", [])
+            ]
+        self.metadata = raw
         self.model = SentenceTransformer(EMBED_MODEL)
 
     def retrieve(self, query_text: str, top_k: int = 5) -> list[dict[str, Any]]:

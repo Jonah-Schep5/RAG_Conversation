@@ -11,8 +11,8 @@ Output files (written to src/):
   metadata.json     - list of dicts, one per row, indexed by FAISS position
 """
 
+import gzip
 import json
-import pickle
 from pathlib import Path
 
 import faiss
@@ -24,7 +24,7 @@ from tqdm import tqdm
 DATA_DIR = Path(__file__).parent
 TRAIN_CSV = DATA_DIR / "train_data.csv"
 INDEX_FILE = DATA_DIR / "faiss_index.bin"
-METADATA_FILE = DATA_DIR / "metadata.json"
+METADATA_FILE = DATA_DIR / "metadata.json.gz"
 
 EMBED_MODEL = "all-MiniLM-L6-v2"
 BATCH_SIZE = 256
@@ -59,7 +59,12 @@ def build_index() -> None:
     for i, (_, row) in enumerate(df.iterrows()):
         # Parse turns for rich UI display; fall back to [] on bad JSON
         try:
-            turns = json.loads(row.get("Transcript_JSON", "[]"))
+            raw_turns = json.loads(row.get("Transcript_JSON", "[]"))
+            # Compact list-of-lists: [speaker, text, event] — no repeated key names
+            turns = [
+                [t.get("speaker", ""), t.get("text", ""), t.get("event", "null")]
+                for t in raw_turns
+            ]
         except (json.JSONDecodeError, TypeError):
             turns = []
         metadata.append({
@@ -96,7 +101,7 @@ def build_index() -> None:
     faiss.write_index(index, str(INDEX_FILE))
     print(f"FAISS index saved -> {INDEX_FILE}")
 
-    with open(METADATA_FILE, "w") as f:
+    with gzip.open(METADATA_FILE, "wt", encoding="utf-8") as f:
         json.dump(metadata, f)
     print(f"Metadata saved   -> {METADATA_FILE}")
 

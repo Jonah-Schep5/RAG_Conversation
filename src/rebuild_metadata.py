@@ -1,8 +1,12 @@
 """
 rebuild_metadata.py
-Regenerates metadata.json from train_data.csv without re-running embeddings.
+Regenerates metadata.json.gz from train_data.csv without re-running embeddings.
 Run this whenever the metadata schema changes but the FAISS index is unchanged.
+
+transcript_turns is stored as a compact list-of-lists [[speaker, text, event], ...]
+instead of list-of-dicts to minimise file size.
 """
+import gzip
 import json
 from pathlib import Path
 
@@ -13,7 +17,7 @@ from build_index import transcript_to_text
 
 DATA_DIR = Path(__file__).parent
 TRAIN_CSV = DATA_DIR / "train_data.csv"
-METADATA_FILE = DATA_DIR / "metadata.json"
+METADATA_FILE = DATA_DIR / "metadata.json.gz"
 
 
 def rebuild_metadata() -> None:
@@ -28,7 +32,12 @@ def rebuild_metadata() -> None:
     metadata = []
     for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df))):
         try:
-            turns = json.loads(row.get("Transcript_JSON", "[]"))
+            raw_turns = json.loads(row.get("Transcript_JSON", "[]"))
+            # Compact list-of-lists: [speaker, text, event] — no repeated key names
+            turns = [
+                [t.get("speaker", ""), t.get("text", ""), t.get("event", "null")]
+                for t in raw_turns
+            ]
         except (json.JSONDecodeError, TypeError):
             turns = []
         metadata.append({
@@ -42,9 +51,10 @@ def rebuild_metadata() -> None:
             "transcript_turns": turns,
         })
 
-    with open(METADATA_FILE, "w") as f:
+    with gzip.open(METADATA_FILE, "wt", encoding="utf-8") as f:
         json.dump(metadata, f)
-    print(f"Metadata saved -> {METADATA_FILE}  ({len(metadata)} records)")
+    size_mb = METADATA_FILE.stat().st_size / 1e6
+    print(f"Metadata saved -> {METADATA_FILE}  ({len(metadata)} records, {size_mb:.1f} MB)")
 
 
 if __name__ == "__main__":
