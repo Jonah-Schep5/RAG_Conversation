@@ -61,14 +61,19 @@ SYSTEM_PROMPT = textwrap.dedent("""\
       - A set of SIMILAR PAST CONVERSATIONS retrieved from a knowledge base.
       - A CURRENT CONVERSATION that is in progress or just ended.
 
-    Your job is to analyze the current conversation and provide:
-    1. **Next Event Prediction**: What is the most likely next event or action
-       in this call? (e.g., verification, hold, transfer, resolution, callback)
-    2. **Customer Sentiment**: Assess the customer's current sentiment
-       (Positive / Neutral / Negative / Escalating) and briefly explain why.
-    3. **Recommended Agent Script**: Write 1–3 specific sentences the agent
-       should say RIGHT NOW to de-escalate, improve sentiment, or guide the
-       call toward a successful resolution.
+    Respond using EXACTLY this format (keep the headers verbatim):
+
+    NEXT ACTION: <one sentence — the single most important thing the agent should say or do right now>
+
+    **1. Next Event Prediction**
+    <What is the most likely next event in this call? e.g., verification, hold, transfer, resolution, callback>
+
+    **2. Customer Sentiment**
+    <Positive / Neutral / Negative / Escalating — and a 1–2 sentence explanation>
+
+    **3. Recommended Agent Script**
+    <1–3 specific sentences the agent should say to de-escalate, improve sentiment,
+    or guide the call toward a successful resolution>
 
     Base your analysis on patterns from the similar past conversations.
     Be specific, empathetic, and actionable.
@@ -105,6 +110,17 @@ def build_prompt(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
+
+
+# ─── Parse next action from LLM output ───────────────────────────────────────
+def extract_next_action(analysis: str) -> str | None:
+    """Pull the NEXT ACTION line out of the structured LLM response."""
+    for line in analysis.splitlines():
+        stripped = line.strip()
+        if stripped.upper().startswith("NEXT ACTION:"):
+            action = stripped[len("NEXT ACTION:"):].strip()
+            return action if action else None
+    return None
 
 
 # ─── Streamlit UI ─────────────────────────────────────────────────────────────
@@ -194,6 +210,39 @@ def main() -> None:
     for i, entry in enumerate(reversed(st.session_state.history)):
         idx = len(st.session_state.history) - i
         with st.expander(f"Analysis #{idx}", expanded=(i == 0)):
+
+            # ── Glanceable next action banner ──────────────────────────────
+            next_action = extract_next_action(entry["analysis"])
+            if next_action:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color: #1a1a2e;
+                        border-left: 6px solid #00d4aa;
+                        border-radius: 8px;
+                        padding: 18px 22px;
+                        margin-bottom: 18px;
+                    ">
+                        <div style="
+                            color: #00d4aa;
+                            font-size: 11px;
+                            font-weight: 700;
+                            letter-spacing: 2px;
+                            text-transform: uppercase;
+                            margin-bottom: 8px;
+                        ">⚡ Next Best Action</div>
+                        <div style="
+                            color: #ffffff;
+                            font-size: 20px;
+                            font-weight: 600;
+                            line-height: 1.4;
+                        ">{next_action}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # ── Detail columns ─────────────────────────────────────────────
             col_left, col_right = st.columns([1, 1])
 
             with col_left:
@@ -201,7 +250,7 @@ def main() -> None:
                 st.text(entry["transcript"])
 
             with col_right:
-                st.markdown("**AI Analysis**")
+                st.markdown("**Full Analysis**")
                 st.markdown(entry["analysis"])
 
             if show_retrieved:

@@ -13,7 +13,7 @@ import requests
 SRC = Path(__file__).parent.parent
 sys.path.insert(0, str(SRC))
 
-from app import build_prompt, call_lm_studio
+from app import build_prompt, call_lm_studio, extract_next_action
 
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
 
@@ -24,6 +24,33 @@ def lm_studio_available() -> bool:
         return True
     except Exception:
         return False
+
+
+class TestExtractNextAction:
+    def test_extracts_standard_line(self):
+        analysis = "NEXT ACTION: Apologize and offer a credit.\n\n**1. Next Event**\nHold"
+        assert extract_next_action(analysis) == "Apologize and offer a credit."
+
+    def test_case_insensitive(self):
+        analysis = "next action: Ask the customer for their account number."
+        assert extract_next_action(analysis) == "Ask the customer for their account number."
+
+    def test_returns_none_when_missing(self):
+        analysis = "**1. Next Event**\nHold\n**2. Sentiment**\nNegative"
+        assert extract_next_action(analysis) is None
+
+    def test_returns_none_for_empty_action(self):
+        analysis = "NEXT ACTION:\n**1. Next Event**\nHold"
+        assert extract_next_action(analysis) is None
+
+    def test_handles_leading_whitespace(self):
+        analysis = "  NEXT ACTION: Transfer the call to billing.\n**Details**"
+        assert extract_next_action(analysis) == "Transfer the call to billing."
+
+    def test_ignores_next_action_mid_text(self):
+        # Only the first matching line should be used
+        analysis = "NEXT ACTION: Say hello.\nSome other next action: something else."
+        assert extract_next_action(analysis) == "Say hello."
 
 
 class TestBuildPrompt:
